@@ -35,5 +35,10 @@
     "grunt-contrib-watch": "^1.1.0",
     "grunt-markdox": "^1.2.1",
     "load-grunt-tasks": "^5.1.0"
+  },
+  "overrides": {
+    "markdox": {
+      "dox": "0.9.0"
+    }
   }
 }
