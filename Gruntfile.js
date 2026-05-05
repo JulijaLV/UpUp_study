@@ -24,22 +24,6 @@ module.exports = function(grunt) {
         },
       },
     },
-    imagemin: {
-      demoimages: {                       // Target
-        options: {                        // Target options
-        },
-        files: [{
-          expand: true,                   // Enable dynamic expansion
-          cwd: 'demo/img',                // Src matches are relative to this path
-          src: ['*.{png,jpg,gif}'],       // Actual patterns to match
-          dest: 'demo/img'                // Destination path prefix
-        }]
-      }
-    },
-    watch: {
-      files: ['src/**', 'demo/css/online.css', '!**/node_modules/**'],
-      tasks: ['devwatcher'],
-    },
     connect: {
       server: {
         options: {
@@ -56,11 +40,6 @@ module.exports = function(grunt) {
         files: {
           'demo/css/online.min.css': ['demo/css/online.css'],
         },
-      },
-    },
-    markdox: {
-      target: {
-        files: [{ src: 'src/upup.js', dest: 'docs/README.md' }],
       },
     },
     compress: {
@@ -80,13 +59,9 @@ module.exports = function(grunt) {
   grunt.registerTask('default', [
     'jshint',
     'uglify',
-    'markdox',
-    'imagemin',
     'cssmin',
     'compress',
   ]);
 
-  grunt.registerTask('devwatcher', ['jshint', 'uglify', 'cssmin']);
-
-  grunt.registerTask('dev', ['default', 'connect', 'watch']);
+  grunt.registerTask('dev', ['default', 'connect']);
 };
