@@ -1,0 +1,131 @@
+name: DevSecOps Deploy
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: upup-study
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  CI:
+    name: Build, Test and Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Run Gitleaks secret scan
+        uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        continue-on-error: true
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: 0
+          ignore-unfixed: true
+
+      - name: Build
+        run: npx grunt
+
+      - name: Build Docker image
+        run: docker build -t ${{ env.IMAGE_NAME }}:test .
+
+      - name: Run Trivy Docker image scan
+        uses: aquasecurity/trivy-action@master
+        continue-on-error: true
+        with:
+          scan-type: image
+          scan-ref: ${{ env.IMAGE_NAME }}:test
+          severity: HIGH,CRITICAL
+          exit-code: 0
+          ignore-unfixed: true
+
+      - name: Run Docker Container
+        run: docker run -d -p 8080:80 ${{ env.IMAGE_NAME }}:test
+
+      - name: Test container response
+        run: |
+          sleep 5
+          curl -I http://localhost:8080
+
+      - name: OWASP ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.15.0
+        with:
+          target: http://localhost:8080
+          allow_issue_writing: false
+          fail_action: false
+
+  CD:
+    name: Push Docker image
+    runs-on: ubuntu-latest
+    needs: CI
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
+      github.event_name == 'workflow_dispatch'
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_SECRET }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKER_USERNAME }}/upup-study
+          tags: |
+            type=raw,value=latest
+            type=sha
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
